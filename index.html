@@ -83,10 +83,11 @@
     .muted { color: var(--muted); font-size: var(--fs-sm); }
 
     /* =====================
-       Floor Map (SVG)
+       Floor Map (External SVG)
        ===================== */
     .map-stage { position: absolute; inset: 16px; display: grid; }
     .map-frame { width: 100%; height: 100%; border-radius: calc(var(--radius) - 6px); background: #0a0f14; border: 1px solid rgba(255,255,255,0.06); overflow: hidden; }
+    .map-obj { width: 100%; height: 100%; display: block; }
     .map-toolbar { position: absolute; right: 20px; bottom: 20px; display: flex; gap: 10px; background: rgba(12,18,24,0.8); backdrop-filter: blur(6px); padding: 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.08); }
     .btn { min-width: var(--tap); height: var(--tap); padding: 0 18px; border: 1px solid rgba(255,255,255,0.08); background: #0f161d; color: var(--text); border-radius: 999px; font-size: var(--fs-md); display: inline-flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; }
     .btn:active { transform: translateY(1px); }
@@ -105,22 +106,30 @@
     .room.active { filter: drop-shadow(0 0 10px rgba(76, 194, 255, 0.7)); }
 
     /* =====================
-       Calendar (Monthly)
+       Calendar (Monthly) with Flip Detail
        ===================== */
-    .calendar { display: grid; grid-template-rows: auto auto 1fr; gap: 12px; min-height: 0; }
-    .calendar .head { display: flex; align-items: center; justify-content: space-between; }
+    .calendar { display: grid; grid-template-rows: 1fr; min-height: 0; }
+    .cal-flip { position: relative; width: 100%; flex: 1; transform-style: preserve-3d; transition: transform 500ms ease; min-height: 0; }
+    .cal-flip.is-flipped { transform: rotateY(180deg); }
+    .side { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; padding: 0; border-radius: 14px; backface-visibility: hidden; }
+    .side.front { padding: 0; }
+    .side.back { transform: rotateY(180deg); padding: 0; }
+
+    .calendar .head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; }
     .calendar .head .title { font-size: var(--fs-lg); }
     .calendar .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-content: start; }
-    .calendar .dow, .calendar .cell { text-align: center; padding: 8px; border-radius: 10px; }
+    .calendar .dow, .calendar .cell { text-align: center; padding: 6px; border-radius: 10px; }
     .calendar .dow { color: var(--muted); font-size: var(--fs-sm); }
-    .calendar .cell { position: relative; font-size: var(--fs-md); background: #0b1219; border: 1px solid rgba(255,255,255,0.06); min-height: 56px; display: grid; place-items: center; }
+    .calendar .cell { position: relative; font-size: var(--fs-md); background: #0b1219; border: 1px solid rgba(255,255,255,0.06); min-height: 44px; display: grid; place-items: center; }
     .calendar .cell.today { outline: 2px solid var(--accent); }
-    .calendar .cell .dot { position: absolute; bottom: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .calendar .cell .dot { position: absolute; bottom: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
     .calendar .cell .dot.multiple { box-shadow: 10px 0 0 var(--warning), -10px 0 0 var(--accent-2); }
 
-    .day-detail { margin-top: 10px; background: #0b1219; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; display: none; min-height: 0; overflow: auto; }
-    .day-detail.visible { display: block; }
-    .event { padding: 10px; border-radius: 10px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px; }
+    .cal-detail { display: flex; flex-direction: column; gap: 12px; height: 100%; }
+    .cal-detail .bar { display: flex; align-items: center; justify-content: space-between; }
+    .cal-detail .back-btn { composes: btn; } /* visual parity with .btn */
+    .detail-list { overflow: auto; display: grid; gap: 10px; padding-top: 8px; }
+    .event { padding: 10px; border-radius: 10px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); }
     .event h4 { margin: 0 0 4px; font-size: var(--fs-md); }
     .event .when { font-size: var(--fs-sm); color: var(--muted); }
 
@@ -137,13 +146,12 @@
     .ann-item[data-expanded="false"] p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
     /* =====================
-       Daily Trivia (Flip)
+       Trivia (Flip)
        ===================== */
     .trivia { perspective: 1200px; }
     .flip { position: relative; width: 100%; flex: 1; transform-style: preserve-3d; transition: transform 500ms ease; }
     .flip.is-flipped { transform: rotateY(180deg); }
-    .side { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; border-radius: 14px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); backface-visibility: hidden; }
-    .side.back { transform: rotateY(180deg); }
+    .side.trivia-side { padding: 16px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); }
     .trivia .q, .trivia .a { font-size: var(--fs-lg); text-align: center; }
     .trivia .tap-hint { margin-top: 8px; font-size: var(--fs-sm); color: var(--muted); text-align: center; }
 
@@ -181,35 +189,8 @@
     <section class="map-panel" aria-label="Interactive floor map">
       <div class="map-stage">
         <div class="map-frame" id="mapFrame">
-          <svg id="floorMap" viewBox="0 0 1600 900" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor map">
-            <defs>
-              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#0f2130"/>
-                <stop offset="100%" stop-color="#0b141c"/>
-              </linearGradient>
-            </defs>
-            <rect x="0" y="0" width="1600" height="900" fill="url(#g1)"/>
-            <g id="R-LOBBY" class="room" data-name="Lobby" data-desc="Welcome area & reception">
-              <rect x="40" y="40" width="520" height="320" rx="18" fill="#14314a" stroke="#2f9bff" stroke-opacity="0.3"/>
-              <text x="300" y="200" fill="#cfe9ff" font-size="36" text-anchor="middle">Lobby</text>
-            </g>
-            <g id="R-MEET-A" class="room" data-name="Meeting A" data-desc="8 seats, Zoom enabled">
-              <rect x="600" y="60" width="400" height="220" rx="16" fill="#1a2b3c" stroke="#2f9bff" stroke-opacity="0.25"/>
-              <text x="800" y="170" fill="#cfe9ff" font-size="30" text-anchor="middle">Meeting A</text>
-            </g>
-            <g id="R-MEET-B" class="room" data-name="Meeting B" data-desc="10 seats, Teams enabled">
-              <rect x="1040" y="60" width="520" height="220" rx="16" fill="#1a2b3c" stroke="#2f9bff" stroke-opacity="0.25"/>
-              <text x="1300" y="170" fill="#cfe9ff" font-size="30" text-anchor="middle">Meeting B</text>
-            </g>
-            <g id="R-DESKS" class="room" data-name="Open Desks" data-desc="Hot desks, first-come">
-              <rect x="40" y="400" width="900" height="440" rx="18" fill="#152532" stroke="#2f9bff" stroke-opacity="0.2"/>
-              <text x="490" y="640" fill="#cfe9ff" font-size="36" text-anchor="middle">Open Desks</text>
-            </g>
-            <g id="R-KITCHEN" class="room" data-name="Kitchen" data-desc="Snacks, coffee, water">
-              <rect x="980" y="370" width="580" height="470" rx="18" fill="#1b2b36" stroke="#2f9bff" stroke-opacity="0.22"/>
-              <text x="1270" y="610" fill="#cfe9ff" font-size="36" text-anchor="middle">Kitchen</text>
-            </g>
-          </svg>
+          <!-- External SVG map -->
+          <object id="mapObject" data="./map.svg" type="image/svg+xml" class="map-obj" aria-label="Floor map"></object>
         </div>
 
         <!-- Map toolbar (zoom, reset) -->
@@ -237,27 +218,41 @@
     <!-- ============ SIDEBAR (Calendar + Trivia) ============ -->
     <aside class="sidebar">
       <section class="card calendar" id="calendar" aria-label="Monthly calendar">
-        <div class="head">
-          <div class="row">
-            <button class="btn" id="prevMonth" aria-label="Previous month">◀</button>
-            <div class="title" id="calTitle">Month YYYY</div>
-            <button class="btn" id="nextMonth" aria-label="Next month">▶</button>
+        <div class="cal-flip" id="calFlip">
+          <!-- Front: month grid -->
+          <div class="side front">
+            <div class="head">
+              <div class="row">
+                <button class="btn" id="prevMonth" aria-label="Previous month">◀</button>
+                <div class="title" id="calTitle">Month YYYY</div>
+                <button class="btn" id="nextMonth" aria-label="Next month">▶</button>
+              </div>
+              <button class="btn" id="todayBtn" aria-label="Jump to today">Today</button>
+            </div>
+            <div class="grid" id="dow"></div>
+            <div class="grid" id="calGrid" role="grid"></div>
           </div>
-          <button class="btn" id="todayBtn" aria-label="Jump to today">Today</button>
+          <!-- Back: selected day details -->
+          <div class="side back">
+            <div class="cal-detail">
+              <div class="bar">
+                <div class="title" id="calDetailTitle">Events</div>
+                <button class="btn" id="calBack" aria-label="Back to calendar">Back</button>
+              </div>
+              <div class="detail-list" id="calDetail"></div>
+            </div>
+          </div>
         </div>
-        <div class="grid" id="dow"></div>
-        <div class="grid" id="calGrid" role="grid"></div>
-        <div class="day-detail" id="dayDetail" aria-live="polite"></div>
       </section>
 
       <section class="card trivia" aria-label="Daily trivia">
         <h2>Daily Trivia</h2>
-        <div class="flip" id="triviaFlip">
-          <div class="side front">
+        <div class="flip" id="triviaFlip" role="button" tabindex="0" aria-pressed="false">
+          <div class="side trivia-side front">
             <div class="q" id="triviaQ">Loading…</div>
             <div class="tap-hint">Tap to reveal answer</div>
           </div>
-          <div class="side back">
+          <div class="side trivia-side back">
             <div class="a" id="triviaA">—</div>
             <div class="tap-hint">Tap to flip back</div>
           </div>
@@ -273,11 +268,11 @@
 
   </div>
 
+  <!-- External config -->
+  <script src="./config.js"></script>
   <script>
-    // ==========================
-    // Simple Data (Edit Me)
-    // ==========================
-    const CONFIG = {
+    // Guard: fall back if external CONFIG not loaded
+    const CONFIG = window.CONFIG || {
       locationName: "Main Campus – 3rd Floor",
       inactivityMs: 90_000,
       trivia: { q: "Which planet has the most moons?", a: "Saturn." },
@@ -302,9 +297,13 @@
     const resetIdle = () => {
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        flip(false);
-        collapseDayDetail();
+        // Trivia
+        flipTrivia(false);
+        // Calendar
+        calFlip.classList.remove('is-flipped');
+        // Announcements
         document.querySelectorAll('.ann-item').forEach(el => el.dataset.expanded = "false");
+        // Map reset
         mapZoom = 1; mapX = 0; mapY = 0; applyMapTransform();
         hideTooltip();
       }, CONFIG.inactivityMs);
@@ -327,18 +326,28 @@
     setInterval(updateClock, 1000); updateClock();
 
     // ==========================
-    // Trivia Flip
+    // Trivia Flip (left-click + touch)
     // ==========================
     const flipEl = document.getElementById('triviaFlip');
     const triviaQ = document.getElementById('triviaQ');
     const triviaA = document.getElementById('triviaA');
-    const flip = (toFlipped = null) => {
+
+    function flipTrivia(toFlipped = null) {
       const isFlipped = flipEl.classList.contains('is-flipped');
       const next = toFlipped === null ? !isFlipped : !!toFlipped;
       flipEl.classList.toggle('is-flipped', next);
-    };
-    flipEl.addEventListener('click', () => flip());
-    flipEl.addEventListener('pointerup', () => flip());
+      flipEl.setAttribute('aria-pressed', String(next));
+    }
+
+    // primary mouse button or touch
+    flipEl.addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return; // only left click
+      flipTrivia();
+    });
+    flipEl.addEventListener('touchend', () => flipTrivia());
+    flipEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipTrivia(); }
+    });
 
     // Load trivia content
     triviaQ.textContent = CONFIG.trivia.q; triviaA.textContent = CONFIG.trivia.a;
@@ -363,12 +372,15 @@
     });
 
     // ==========================
-    // Calendar (Monthly)
+    // Calendar (Monthly) with Flip Detail
     // ==========================
+    const calFlip = document.getElementById('calFlip');
     const calTitle = document.getElementById('calTitle');
     const calGrid = document.getElementById('calGrid');
     const dowEl = document.getElementById('dow');
-    const dayDetail = document.getElementById('dayDetail');
+    const calDetail = document.getElementById('calDetail');
+    const calDetailTitle = document.getElementById('calDetailTitle');
+    const calBack = document.getElementById('calBack');
     const prevBtn = document.getElementById('prevMonth');
     const nextBtn = document.getElementById('nextMonth');
     const todayBtn = document.getElementById('todayBtn');
@@ -379,7 +391,7 @@
     let viewDate = new Date();
 
     function ymd(date) { return date.toISOString().slice(0,10); }
-    function eventsFor(dateStr) { return CONFIG.events.filter(e => e.date === dateStr); }
+    function eventsFor(dateStr) { return (CONFIG.events || []).filter(e => e.date === dateStr); }
 
     function renderCalendar(date) {
       const y = date.getFullYear();
@@ -405,52 +417,77 @@
 
       calGrid.querySelectorAll('.cell').forEach(btn => {
         const dateStr = btn.dataset.date;
-        const onTap = () => showDayDetail(dateStr);
-        btn.addEventListener('click', onTap);
+        const onTap = (e) => { if (e.pointerType === 'mouse' && e.button !== undefined && e.button !== 0) return; showEventDetail(dateStr); };
         btn.addEventListener('pointerup', onTap);
+        btn.addEventListener('click', () => showEventDetail(dateStr));
       });
     }
 
-    function showDayDetail(dateStr) {
+    function showEventDetail(dateStr) {
       const list = eventsFor(dateStr);
-      dayDetail.classList.add('visible');
+      calDetailTitle.textContent = new Date(dateStr).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
       if (list.length === 0) {
-        dayDetail.innerHTML = `<div class="muted">No events for ${dateStr}.</div>`;
-        return;
+        calDetail.innerHTML = `<div class="muted">No events for ${dateStr}.</div>`;
+      } else {
+        calDetail.innerHTML = list.map(e => `
+          <div class="event">
+            <h4>${e.title}</h4>
+            <div class="when">${e.date} · ${e.time || ''} · ${e.where || ''}</div>
+            ${e.notes ? `<div class="muted" style="margin-top:6px">${e.notes}</div>` : ''}
+          </div>`).join('');
       }
-      dayDetail.innerHTML = list.map(e => `
-        <div class="event">
-          <h4>${e.title}</h4>
-          <div class="when">${e.date} · ${e.time || ''} · ${e.where || ''}</div>
-          ${e.notes ? `<div class="muted" style="margin-top:6px">${e.notes}</div>` : ''}
-        </div>`).join('');
+      calFlip.classList.add('is-flipped');
     }
 
-    function collapseDayDetail() { dayDetail.classList.remove('visible'); dayDetail.innerHTML = ''; }
+    calBack.addEventListener('click', () => { calFlip.classList.remove('is-flipped'); });
 
     renderCalendar(viewDate);
-    prevBtn.addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); renderCalendar(viewDate); collapseDayDetail(); });
-    nextBtn.addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); renderCalendar(viewDate); collapseDayDetail(); });
-    todayBtn.addEventListener('click', () => { viewDate = new Date(); renderCalendar(viewDate); collapseDayDetail(); });
+    prevBtn.addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); renderCalendar(viewDate); calFlip.classList.remove('is-flipped'); });
+    nextBtn.addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); renderCalendar(viewDate); calFlip.classList.remove('is-flipped'); });
+    todayBtn.addEventListener('click', () => { viewDate = new Date(); renderCalendar(viewDate); calFlip.classList.remove('is-flipped'); });
 
     // ==========================
-    // Map interactions (pinch/drag/zoom-lite)
+    // Map interactions (pinch/drag/zoom-lite) with external SVG
     // ==========================
     const mapFrame = document.getElementById('mapFrame');
-    const svg = document.getElementById('floorMap');
+    const mapObject = document.getElementById('mapObject');
     const tooltip = document.getElementById('mapTooltip');
     const ttTitle = document.getElementById('ttTitle');
     const ttDesc = document.getElementById('ttDesc');
 
+    let svgDoc = null, svgEl = null;
     let mapZoom = 1, mapX = 0, mapY = 0;
     let isPanning = false, startX = 0, startY = 0;
 
     function applyMapTransform() {
-      svg.style.transformOrigin = 'center center';
-      svg.style.transform = `translate(${mapX}px, ${mapY}px) scale(${mapZoom})`;
+      if (!svgEl) return; // wait for map to load
+      svgEl.style.transformOrigin = 'center center';
+      svgEl.style.transform = `translate(${mapX}px, ${mapY}px) scale(${mapZoom})`;
     }
 
     function hideTooltip() { tooltip.classList.remove('visible'); }
+
+    function bindRoomTaps() {
+      if (!svgDoc) return;
+      svgDoc.querySelectorAll('.room').forEach(node => {
+        const onTap = (e) => {
+          svgDoc.querySelectorAll('.room').forEach(r => r.classList.remove('active'));
+          node.classList.add('active');
+          ttTitle.textContent = node.dataset.name || node.id || 'Room';
+          ttDesc.textContent = node.dataset.desc || '';
+          tooltip.classList.add('visible');
+        };
+        node.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; onTap(e); });
+        node.addEventListener('click', onTap);
+      });
+    }
+
+    mapObject.addEventListener('load', () => {
+      svgDoc = mapObject.contentDocument;
+      svgEl = svgDoc && svgDoc.querySelector('svg');
+      applyMapTransform();
+      bindRoomTaps();
+    });
 
     mapFrame.addEventListener('pointerdown', (e) => {
       isPanning = true; startX = e.clientX - mapX; startY = e.clientY - mapY; mapFrame.setPointerCapture(e.pointerId);
@@ -458,6 +495,7 @@
     mapFrame.addEventListener('pointermove', (e) => { if (!isPanning) return; mapX = e.clientX - startX; mapY = e.clientY - startY; applyMapTransform(); });
     mapFrame.addEventListener('pointerup', (e) => { isPanning = false; mapFrame.releasePointerCapture(e.pointerId); });
 
+    // Desktop preview wheel zoom
     mapFrame.addEventListener('wheel', (e) => {
       e.preventDefault();
       const delta = Math.sign(e.deltaY);
@@ -468,19 +506,6 @@
     document.getElementById('zoomIn').addEventListener('click', () => { mapZoom = Math.min(3, mapZoom + 0.15); applyMapTransform(); });
     document.getElementById('zoomOut').addEventListener('click', () => { mapZoom = Math.max(0.7, mapZoom - 0.15); applyMapTransform(); });
     document.getElementById('resetMap').addEventListener('click', () => { mapZoom = 1; mapX = 0; mapY = 0; applyMapTransform(); hideTooltip(); });
-
-    // Room taps
-    svg.querySelectorAll('.room').forEach(node => {
-      const onTap = () => {
-        svg.querySelectorAll('.room').forEach(r => r.classList.remove('active'));
-        node.classList.add('active');
-        ttTitle.textContent = node.dataset.name || node.id;
-        ttDesc.textContent = node.dataset.desc || '';
-        tooltip.classList.add('visible');
-      };
-      node.addEventListener('click', onTap);
-      node.addEventListener('pointerup', onTap);
-    });
 
     // ==========================
     // Fullscreen helper (button + key)
