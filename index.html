@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Interactive Kiosk – Floor Map First</title>
+  <style>
+    /* =====================
+       Base + Design Tokens
+       ===================== */
+    :root {
+      --bg: #0b0f14;
+      --panel: #111820;
+      --panel-2: #0e141b;
+      --text: #e6edf3;
+      --muted: #9fb0c0;
+      --accent: #4cc2ff;
+      --accent-2: #9bffb5;
+      --danger: #ff6b6b;
+      --ok: #55d46a;
+      --warning: #ffc857;
+
+      --radius: 20px;
+      --gap: 20px;
+
+      /* Scales well on 4K while staying legible on smaller previews */
+      --fs-xxl: clamp(28px, 2.2vw, 46px);
+      --fs-xl: clamp(22px, 1.6vw, 34px);
+      --fs-lg: clamp(18px, 1.2vw, 28px);
+      --fs-md: clamp(16px, 1.0vw, 22px);
+      --fs-sm: clamp(14px, 0.85vw, 18px);
+
+      --tap: 52px; /* min touch target */
+      --shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      touch-action: manipulation; /* improves touch feel on kiosks */
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* =====================
+       Layout
+       ===================== */
+    .wrap {
+      display: grid;
+      grid-template-columns: 1.8fr 1fr; /* Map gets prime real estate */
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        "header header"
+        "map sidebar";
+      gap: var(--gap);
+      padding: 24px;
+      height: 100dvh;
+      width: 100vw;
+    }
+
+    header {
+      grid-area: header;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: var(--gap);
+    }
+
+    .brand {
+      display: flex; align-items: center; gap: 14px;
+      font-size: var(--fs-xl);
+      letter-spacing: 0.5px;
+    }
+    .brand .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 30px var(--accent); }
+
+    .clock { font-size: var(--fs-xl); color: var(--muted); }
+
+    .map-panel { grid-area: map; background: linear-gradient(180deg, var(--panel), var(--panel-2)); border-radius: var(--radius); box-shadow: var(--shadow); position: relative; padding: 16px; overflow: hidden; }
+
+    .sidebar { grid-area: sidebar; display: grid; grid-template-rows: 1fr 1fr 1fr; gap: var(--gap); min-width: 480px; }
+
+    .card { background: linear-gradient(180deg, #0f151c, #0c1117); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; min-height: 0; }
+    .card h2 { font-size: var(--fs-lg); margin: 0 0 10px; letter-spacing: 0.3px; }
+    .muted { color: var(--muted); font-size: var(--fs-sm); }
+
+    /* =====================
+       Floor Map (SVG)
+       ===================== */
+    .map-stage { position: absolute; inset: 16px; display: grid; }
+    .map-frame { width: 100%; height: 100%; border-radius: calc(var(--radius) - 6px); background: #0a0f14; border: 1px solid rgba(255,255,255,0.06); overflow: hidden; }
+    .map-toolbar {
+      position: absolute; right: 20px; bottom: 20px; display: flex; gap: 10px;
+      background: rgba(12,18,24,0.8); backdrop-filter: blur(6px);
+      padding: 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.08);
+    }
+    .btn {
+      min-width: var(--tap); height: var(--tap); padding: 0 18px; border: 1px solid rgba(255,255,255,0.08);
+      background: #0f161d; color: var(--text); border-radius: 999px; font-size: var(--fs-md);
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer;
+    }
+    .btn:active { transform: translateY(1px); }
+
+    .legend { position: absolute; left: 20px; bottom: 20px; display: grid; gap: 6px; background: rgba(12,18,24,0.8); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; }
+    .legend .row { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--muted); }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; }
+
+    .map-tooltip { position: absolute; left: 20px; top: 20px; max-width: 40%; background: rgba(10, 16, 22, 0.9); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px 16px; display: none; box-shadow: var(--shadow); }
+    .map-tooltip.visible { display: block; }
+    .map-tooltip h3 { margin: 0 0 6px; font-size: var(--fs-lg); }
+    .map-tooltip p { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
+
+    /* Hover + Active styles (helpful for desktop preview; touch toggles in JS) */
+    .room { transition: 200ms ease opacity, 200ms ease transform; cursor: pointer; }
+    .room:hover { opacity: 0.85; }
+    .room.active { filter: drop-shadow(0 0 10px rgba(76, 194, 255, 0.7)); }
+
+    /* =====================
+       Calendar (Monthly)
+       ===================== */
+    .calendar { display: grid; grid-template-rows: auto auto 1fr; gap: 12px; min-height: 0; }
+    .calendar .head { display: flex; align-items: center; justify-content: space-between; }
+    .calendar .head .title { font-size: var(--fs-lg); }
+    .calendar .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; flex: 1; align-content: start; }
+    .calendar .dow, .calendar .cell { text-align: center; padding: 8px; border-radius: 10px; }
+    .calendar .dow { color: var(--muted); font-size: var(--fs-sm); }
+    .calendar .cell { position: relative; font-size: var(--fs-md); background: #0b1219; border: 1px solid rgba(255,255,255,0.06); min-height: 60px; display: grid; place-items: center; }
+    .calendar .cell.today { outline: 2px solid var(--accent); }
+    .calendar .cell .dot { position: absolute; bottom: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+    .calendar .cell .dot.multiple { box-shadow: 10px 0 0 var(--warning), -10px 0 0 var(--accent-2); }
+
+    .day-detail { margin-top: 10px; background: #0b1219; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px; display: none; min-height: 0; overflow: auto; }
+    .day-detail.visible { display: block; }
+    .event { padding: 10px; border-radius: 10px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 8px; }
+    .event h4 { margin: 0 0 4px; font-size: var(--fs-md); }
+    .event .when { font-size: var(--fs-sm); color: var(--muted); }
+
+    /* =====================
+       Daily Announcements
+       ===================== */
+    .announcements { display: grid; grid-template-rows: auto 1fr; gap: 10px; min-height: 0; }
+    .ann-list { overflow: auto; display: grid; gap: 10px; }
+    .ann-item { padding: 12px; border-radius: 12px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); }
+    .ann-item h4 { margin: 0 0 6px; font-size: var(--fs-md); }
+    .ann-item p { margin: 0; color: var(--muted); font-size: var(--fs-sm); }
+
+    /* Expand on tap */
+    .ann-item[data-expanded="true"] p { display: block; }
+    .ann-item[data-expanded="false"] p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* =====================
+       Daily Trivia (Flip)
+       ===================== */
+    .trivia { perspective: 1200px; }
+    .flip { position: relative; width: 100%; flex: 1; transform-style: preserve-3d; transition: transform 500ms ease; }
+    .flip.is-flipped { transform: rotateY(180deg); }
+    .side { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; border-radius: 14px; background: #0e1620; border: 1px solid rgba(255,255,255,0.06); backface-visibility: hidden; }
+    .side.back { transform: rotateY(180deg); }
+    .trivia .q, .trivia .a { font-size: var(--fs-lg); text-align: center; }
+    .trivia .tap-hint { margin-top: 8px; font-size: var(--fs-sm); color: var(--muted); text-align: center; }
+
+    /* =====================
+       Utility
+       ===================== */
+    .row { display: flex; gap: 10px; align-items: center; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+    /* Fallback for narrower viewports (development laptops, etc.) */
+    @media (max-width: 1600px) {
+      .wrap { grid-template-columns: 1.2fr 1fr; }
+      .sidebar { min-width: 380px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app">
+    <header>
+      <div class="brand" aria-label="Kiosk Header">
+        <div class="dot" aria-hidden="true"></div>
+        <div><strong>Office Kiosk</strong> <span class="muted" id="locationName"></span></div>
+      </div>
+      <div class="clock" id="clock" aria-live="polite"></div>
+    </header>
+
+    <!-- ============ FLOOR MAP (FOCUS) ============ -->
+    <section class="map-panel" aria-label="Interactive floor map">
+      <div class="map-stage">
+        <div class="map-frame" id="mapFrame">
+          <!-- Replace this SVG with your actual floor map. Keep viewBox and IDs for rooms. -->
+          <svg id="floorMap" viewBox="0 0 1600 900" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Floor map">
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#0f2130"/>
+                <stop offset="100%" stop-color="#0b141c"/>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="1600" height="900" fill="url(#g1)"/>
+
+            <!-- Example zones/rooms -->
+            <g id="R-LOBBY" class="room" data-name="Office" data-desc="empty box for map">
+              <rect x="40" y="40" width="520" height="320" rx="18" fill="#14314a" stroke="#2f9bff" stroke-opacity="0.3"/>
+              <text x="300" y="200" fill="#cfe9ff" font-size="36" text-anchor="middle">Lobby</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Map toolbar (zoom, reset) -->
+        <div class="map-toolbar" role="toolbar" aria-label="Map controls">
+          <button class="btn" id="zoomIn" aria-label="Zoom in">＋</button>
+          <button class="btn" id="zoomOut" aria-label="Zoom out">－</button>
+          <button class="btn" id="resetMap" aria-label="Reset map">Reset</button>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend" aria-label="Map legend">
+          <div class="row"><span class="swatch" style="background:#14314a"></span> Lobby</div>
+          <div class="row"><span class="swatch" style="background:#1a2b3c"></span> Meeting Rooms</div>
+          <div class="row"><span class="swatch" style="background:#152532"></span> Open Space</div>
+          <div class="row"><span class="swatch" style="background:#1b2b36"></span> Kitchen</div>
+        </div>
+
+        <div class="map-tooltip" id="mapTooltip" role="dialog" aria-live="polite">
+          <h3 id="ttTitle">—</h3>
+          <p id="ttDesc">Tap a room to see info.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <!-- Calendar -->
+      <section class="card calendar" id="calendar" aria-label="Monthly calendar">
+        <div class="head">
+          <div class="row">
+            <button class="btn" id="prevMonth" aria-label="Previous month">◀</button>
+            <div class="title" id="calTitle">Month YYYY</div>
+            <button class="btn" id="nextMonth" aria-label="Next month">▶</button>
+          </div>
+          <button class="btn" id="todayBtn" aria-label="Jump to today">Today</button>
+        </div>
+        <div class="grid" id="dow"></div>
+        <div class="grid" id="calGrid" role="grid"></div>
+        <div class="day-detail" id="dayDetail" aria-live="polite"></div>
+      </section>
+
+      <!-- Daily Announcements -->
+      <section class="card announcements" aria-label="Daily office announcements">
+        <h2>Daily Announcements</h2>
+        <div class="ann-list" id="annList"></div>
+      </section>
+
+      <!-- Trivia -->
+      <section class="card trivia" aria-label="Daily trivia">
+        <h2>Daily Trivia</h2>
+        <div class="flip" id="triviaFlip">
+          <div class="side front">
+            <div class="q" id="triviaQ">Loading…</div>
+            <div class="tap-hint">Tap to reveal answer</div>
+          </div>
+          <div class="side back">
+            <div class="a" id="triviaA">—</div>
+            <div class="tap-hint">Tap to flip back</div>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script>
+    // ==========================
+    // Simple Data (Edit Me)
+    // ==========================
+    const CONFIG = {
+      locationName: "5th Floor",
+      inactivityMs: 30_000, // 30s idle reset
+      trivia: { q: "Which planet has the most moons?", a: "Saturn." },
+      announcements: [
+        { title: "announcement", text: "This is an announcement", priority: "ok" },
+        { title: "warning", text: "THIS IS A WARNING", priority: "warning" },
+        { title: "Information", text: "This is just information.", priority: "info" }
+      ],
+      // Calendar events: ISO date strings (YYYY-MM-DD)
+      events: [
+        { date: "2025-08-05", title: "event", time: "09:00", where: "office", notes: "these are notes" },
+        { date: "2025-08-12", title: "event", time: "12:00", where: "office", notes: "notes notes" },
+        { date: "2025-08-12", title: "event", time: "12:30", where: "office", notes: "notes notes notes." },
+        { date: "2025-08-21", title: "event", time: "16:00", where: "office", notes: "notes notes." },
+        { date: "2025-09-02", title: "event", time: "10:00", where: "office", notes: "notes." }
+      ]
+    };
+
+    // ==========================
+    // Kiosk Helpers (Idle Reset)
+    // ==========================
+    let idleTimer = null;
+    const resetIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        // Reset UI state
+        flip(false);
+        collapseDayDetail();
+        document.querySelectorAll('.ann-item').forEach(el => el.dataset.expanded = "false");
+        // Map reset
+        mapZoom = 1; mapX = 0; mapY = 0; applyMapTransform();
+        hideTooltip();
+      }, CONFIG.inactivityMs);
+    };
+
+    ['pointerdown','pointerup','pointermove','wheel','keydown','touchstart'].forEach(evt => {
+      window.addEventListener(evt, resetIdle, { passive: true });
+    });
+
+    // ==========================
+    // Clock
+    // ==========================
+    const clockEl = document.getElementById('clock');
+    const locationNameEl = document.getElementById('locationName');
+    locationNameEl.textContent = `· ${CONFIG.locationName}`;
+    const updateClock = () => {
+      const now = new Date();
+      const opts = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+      clockEl.textContent = new Intl.DateTimeFormat(undefined, opts).format(now);
+    };
+    setInterval(updateClock, 1000); updateClock();
+
+    // ==========================
+    // Trivia Flip
+    // ==========================
+    const flipEl = document.getElementById('triviaFlip');
+    const triviaQ = document.getElementById('triviaQ');
+    const triviaA = document.getElementById('triviaA');
+    triviaQ.textContent = CONFIG.trivia.q; triviaA.textContent = CONFIG.trivia.a;
+
+    const flip = (toFlipped = null) => {
+      const isFlipped = flipEl.classList.contains('is-flipped');
+      const next = toFlipped === null ? !isFlipped : !!toFlipped;
+      flipEl.classList.toggle('is-flipped', next);
+    };
+    flipEl.addEventListener('click', () => flip());
+    flipEl.addEventListener('pointerup', () => flip());
+
+    // ==========================
+    // Announcements (expand on tap)
+    // ==========================
+    const annList = document.getElementById('annList');
+    const priorityColor = (p) => ({ ok: 'var(--ok)', warning: 'var(--warning)', danger: 'var(--danger)', info: 'var(--accent)'}[p] || 'var(--accent)');
+    CONFIG.announcements.forEach((a, i) => {
+      const el = document.createElement('div');
+      el.className = 'ann-item';
+      el.dataset.expanded = 'false';
+      el.innerHTML = `
+        <h4><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${priorityColor(a.priority)};box-shadow:0 0 10px ${priorityColor(a.priority)};margin-right:8px"></span>${a.title}</h4>
+        <p>${a.text}</p>
+      `;
+      el.addEventListener('click', () => {
+        el.dataset.expanded = el.dataset.expanded === 'true' ? 'false' : 'true';
+      });
+      el.addEventListener('pointerup', () => {
+        el.dataset.expanded = el.dataset.expanded === 'true' ? 'false' : 'true';
+      });
+      annList.appendChild(el);
+    });
+
+    // ==========================
+    // Calendar (Monthly)
+    // ==========================
+    const calTitle = document.getElementById('calTitle');
+    const calGrid = document.getElementById('calGrid');
+    const dowEl = document.getElementById('dow');
+    const dayDetail = document.getElementById('dayDetail');
+    const prevBtn = document.getElementById('prevMonth');
+    const nextBtn = document.getElementById('nextMonth');
+    const todayBtn = document.getElementById('todayBtn');
+
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    dowEl.innerHTML = DOW.map(d => `<div class="dow">${d}</div>`).join('');
+
+    let viewDate = new Date();
+
+    function ymd(date) { return date.toISOString().slice(0,10); }
+
+    function eventsFor(dateStr) {
+      return CONFIG.events.filter(e => e.date === dateStr);
+    }
+
+    function renderCalendar(date) {
+      const y = date.getFullYear();
+      const m = date.getMonth();
+      const first = new Date(y, m, 1);
+      const last = new Date(y, m + 1, 0);
+      calTitle.textContent = `${first.toLocaleString(undefined, { month: 'long' })} ${y}`;
+
+      const startPad = first.getDay();
+      const days = last.getDate();
+
+      const todayStr = ymd(new Date());
+      const cells = [];
+
+      // leading blanks
+      for (let i = 0; i < startPad; i++) cells.push('<div></div>');
+
+      for (let d = 1; d <= days; d++) {
+        const ds = ymd(new Date(y, m, d));
+        const evts = eventsFor(ds);
+        const dots = evts.length > 0 ? `<div class="dot ${evts.length > 1 ? 'multiple' : ''}"></div>` : '';
+        const isToday = ds === todayStr;
+        cells.push(`<button class="cell ${isToday ? 'today' : ''}" role="gridcell" data-date="${ds}">${d}${dots}</button>`);
+      }
+
+      calGrid.innerHTML = cells.join('');
+
+      // Bind taps
+      calGrid.querySelectorAll('.cell').forEach(btn => {
+        const dateStr = btn.dataset.date;
+        const onTap = () => showDayDetail(dateStr);
+        btn.addEventListener('click', onTap);
+        btn.addEventListener('pointerup', onTap);
+      });
+    }
+
+    function showDayDetail(dateStr) {
+      const list = eventsFor(dateStr);
+      if (list.length === 0) {
+        dayDetail.classList.add('visible');
+        dayDetail.innerHTML = `<div class="muted">No events for ${dateStr}.</div>`;
+        return;
+      }
+      dayDetail.classList.add('visible');
+      dayDetail.innerHTML = list.map(e => `
+        <div class="event">
+          <h4>${e.title}</h4>
+          <div class="when">${e.date} · ${e.time || ''} · ${e.where || ''}</div>
+          ${e.notes ? `<div class="muted" style="margin-top:6px">${e.notes}</div>` : ''}
+        </div>`).join('');
+    }
+
+    function collapseDayDetail() {
+      dayDetail.classList.remove('visible');
+      dayDetail.innerHTML = '';
+    }
+
+    renderCalendar(viewDate);
+
+    prevBtn.addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1); renderCalendar(viewDate); collapseDayDetail(); });
+    nextBtn.addEventListener('click', () => { viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1); renderCalendar(viewDate); collapseDayDetail(); });
+    todayBtn.addEventListener('click', () => { viewDate = new Date(); renderCalendar(viewDate); collapseDayDetail(); });
+
+    // ==========================
+    // Map interactions (pinch/drag/zoom-lite)
+    // ==========================
+    const mapFrame = document.getElementById('mapFrame');
+    const svg = document.getElementById('floorMap');
+    const tooltip = document.getElementById('mapTooltip');
+    const ttTitle = document.getElementById('ttTitle');
+    const ttDesc = document.getElementById('ttDesc');
+
+    let mapZoom = 1, mapX = 0, mapY = 0;
+    let isPanning = false, startX = 0, startY = 0;
+
+    function applyMapTransform() {
+      svg.style.transformOrigin = 'center center';
+      svg.style.transform = `translate(${mapX}px, ${mapY}px) scale(${mapZoom})`;
+    }
+
+    function hideTooltip() { tooltip.classList.remove('visible'); }
+
+    mapFrame.addEventListener('pointerdown', (e) => {
+      isPanning = true; startX = e.clientX - mapX; startY = e.clientY - mapY; mapFrame.setPointerCapture(e.pointerId);
+    });
+    mapFrame.addEventListener('pointermove', (e) => {
+      if (!isPanning) return; mapX = e.clientX - startX; mapY = e.clientY - startY; applyMapTransform();
+    });
+    mapFrame.addEventListener('pointerup', (e) => { isPanning = false; mapFrame.releasePointerCapture(e.pointerId); });
+
+    // Basic wheel zoom (desktop preview); kiosks typically disable wheel
+    mapFrame.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = Math.sign(e.deltaY);
+      mapZoom = Math.min(3, Math.max(0.7, mapZoom + (delta > 0 ? -0.1 : 0.1)));
+      applyMapTransform();
+    }, { passive: false });
+
+    // Toolbar
+    document.getElementById('zoomIn').addEventListener('click', () => { mapZoom = Math.min(3, mapZoom + 0.15); applyMapTransform(); });
+    document.getElementById('zoomOut').addEventListener('click', () => { mapZoom = Math.max(0.7, mapZoom - 0.15); applyMapTransform(); });
+    document.getElementById('resetMap').addEventListener('click', () => { mapZoom = 1; mapX = 0; mapY = 0; applyMapTransform(); hideTooltip(); });
+
+    // Room taps
+    svg.querySelectorAll('.room').forEach(node => {
+      const onTap = (e) => {
+        svg.querySelectorAll('.room').forEach(r => r.classList.remove('active'));
+        node.classList.add('active');
+        ttTitle.textContent = node.dataset.name || node.id;
+        ttDesc.textContent = node.dataset.desc || '';
+        tooltip.classList.add('visible');
+      };
+      node.addEventListener('click', onTap);
+      node.addEventListener('pointerup', onTap);
+    });
+
+    // ==========================
+    // Fullscreen helper (optional)
+    // ==========================
+    document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'f') document.documentElement.requestFullscreen?.();
+    });
+
+    // Kick off idle timer after everything binds
+    resetIdle();
+
+    // Prevent context menu on kiosk
+    window.addEventListener('contextmenu', e => e.preventDefault());
+  </script>
+</body>
+</html>
