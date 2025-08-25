@@ -85,7 +85,12 @@
     .card { background: linear-gradient(180deg, #0f151c, #0c1117); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; min-height: 0; }
     .card h2 { font-size: var(--fs-lg); margin: 0 0 10px; letter-spacing: 0.3px; }
     .muted { color: var(--muted); font-size: var(--fs-sm); }
-
+    .fullscreen-btn {
+      min-width: var(--tap); height: var(--tap); padding: 0 18px; border: 1px solid rgba(255,255,255,0.08);
+      background: #0f161d; color: var(--text); border-radius: 999px; font-size: var(--fs-md);
+      display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+      margin-left: auto;
+    }
     /* =====================
        Floor Map (SVG)
        ===================== */
@@ -181,8 +186,12 @@
         <div class="dot" aria-hidden="true"></div>
         <div><strong>Office Kiosk</strong> <span class="muted" id="locationName"></span></div>
       </div>
-      <div class="clock" id="clock" aria-live="polite"></div>
+      <div class="row">
+        <div class="clock" id="clock" aria-live="polite"></div>
+        <button class="fullscreen-btn" id="fullscreenBtn" aria-label="Toggle fullscreen">⛶</button>
+      </div>
     </header>
+
 
     <!-- ============ FLOOR MAP (FOCUS) ============ -->
     <section class="map-panel" aria-label="Interactive floor map">
@@ -512,6 +521,25 @@
 
     // Prevent context menu on kiosk
     window.addEventListener('contextmenu', e => e.preventDefault());
+      document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'f') document.documentElement.requestFullscreen?.();
+    });
+
+    const fsBtn = document.getElementById('fullscreenBtn');
+    fsBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.();
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
+
+    // Kick off idle timer after everything binds
+    resetIdle();
+
+    // Prevent context menu on kiosk
+    window.addEventListener('contextmenu', e => e.preventDefault());
   </script>
 </body>
 </html>
+
